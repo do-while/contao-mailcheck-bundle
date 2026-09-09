@@ -1,0 +1,24 @@
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+
+    Softleister\ContaoMailcheckBundle\SpamCheck\DefaultSpamChecker: ~
+
+    # Registry der verfügbaren Prüfungen. Neue Prüfung: eigene Klasse
+    # gegen SpamCheckerInterface anlegen, hier als Service eintragen und
+    # per add()-Aufruf registrieren – sie erscheint dann automatisch als
+    # Auswahl-Option im Formular-Backend.
+    Softleister\ContaoMailcheckBundle\SpamCheck\SpamCheckerRegistry:
+        public: true
+        calls:
+            - method: add
+              arguments:
+                  - 'default'
+                  - '@Softleister\ContaoMailcheckBundle\SpamCheck\DefaultSpamChecker'
+                  - 'Bot-Muster-Scoring (Standard)'
+
+    # public: true, damit Contaos klassischer Hook-Mechanismus (TL_HOOKS)
+    # den Listener über den Container auflösen kann.
+    Softleister\ContaoMailcheckBundle\EventListener\MailcheckListener:
+        public: true

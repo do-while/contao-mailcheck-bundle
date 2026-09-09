@@ -1,0 +1,26 @@
+{
+    "name": "do-while/contao-mailcheck-bundle",
+    "description": "Spam-Prüfung von Formulareingaben vor dem Mailversand",
+    "keywords": ["contao", "spam", "formular", "mailcheck"],
+    "type": "contao-bundle",
+    "license": "LGPL-3.0+",
+    "authors": [
+        {
+            "name": "Softleister - Hagen Klemp",
+            "homepage": "https://www.softleister.de",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": ">=8.1",
+        "contao/core-bundle": "^4.13 || ^5.3"
+    },
+    "autoload": {
+        "psr-4": {
+            "Softleister\\ContaoMailcheckBundle\\": "src/"
+        }
+    },
+    "extra": {
+        "contao-manager-plugin": "Softleister\\ContaoMailcheckBundle\\ContaoManager\\Plugin"
+    }
+}
