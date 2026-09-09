@@ -45,6 +45,12 @@ class SpamCheckerRegistry
     }
 
 
+    public function getLabel( string $id ): ?string
+    {
+        return $this->labels[$id] ?? null;
+    }
+
+
     /**
      * @return array<string, string> id => Label, für das Backend-Auswahlfeld
      */

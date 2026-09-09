@@ -15,6 +15,8 @@ namespace Softleister\ContaoMailcheckBundle\EventListener;
 
 use Contao\Form;
 use Contao\StringUtil;
+use Contao\System;
+use Softleister\ContaoMailcheckBundle\SpamCheck\ScoredSpamCheckerInterface;
 use Softleister\ContaoMailcheckBundle\SpamCheck\SpamCheckerRegistry;
 
 /**
@@ -58,9 +60,16 @@ class MailcheckListener
         $activeChecks = StringUtil::deserialize( $form->mailcheck_checks, true );
 
         if( empty( $activeChecks ) ) return;        // Aus (Default)
-        if( !$this->isSpam( $activeChecks, $submittedData ) ) return;
 
-        if( ( $form->mailcheck_mode ?: self::MODE_DISCARD ) === self::MODE_MARK ) {
+        $triggered = $this->findTriggeredChecks( $activeChecks, $submittedData );
+
+        if( empty( $triggered ) ) return;
+
+        $mode = ( $form->mailcheck_mode ?: self::MODE_DISCARD );
+
+        $this->logSpam( $form, $submittedData, $mode, $triggered );
+
+        if( $mode === self::MODE_MARK ) {
             $form->subject = self::MARK_PREFIX . $form->subject;
 
             if( isset( $submittedData['subject'] ) ) {
@@ -84,14 +93,52 @@ class MailcheckListener
     }
 
 
-    private function isSpam( array $activeChecks, array $submittedData ): bool
+    /**
+     * Führt alle aktiven Prüfungen aus (keine Kurzschluss-Auswertung wie
+     * vorher, da mehrere Prüfungen gleichzeitig aktiv sein können und
+     * alle ausgelösten Prüfungen im Log-Eintrag erscheinen sollen).
+     *
+     * @return array<int, array{id: string, label: string, score: int|null}>
+     */
+    private function findTriggeredChecks( array $activeChecks, array $submittedData ): array
     {
+        $triggered = [];
+
         foreach( $activeChecks as $checkId ) {
             $checker = $this->registry->get( $checkId );
 
-            if( $checker !== null && $checker->isSpam( $submittedData ) ) return true;
+            if( $checker === null ) continue;
+            if( !$checker->isSpam( $submittedData ) ) continue;
+
+            $triggered[] = [
+                'id'    => $checkId,
+                'label' => $this->registry->getLabel( $checkId ) ?: $checkId,
+                'score' => ( $checker instanceof ScoredSpamCheckerInterface ) ? $checker->getScore() : null,
+            ];
         }
 
-        return false;
+        return $triggered;
+    }
+
+
+    private function logSpam( Form $form, array $submittedData, string $mode, array $triggered ): void
+    {
+        $checkParts = [];
+
+        foreach( $triggered as $check ) {
+            $checkParts[] = $check['label'] . ( $check['score'] !== null ? ' (Score: ' . $check['score'] . ')' : '' );
+        }
+
+        $fieldParts = [];
+
+        foreach( $submittedData as $key => $value ) {
+            if( \is_array( $value ) ) $value = \implode( ', ', $value );
+
+            $fieldParts[] = $key . '="' . $value . '"';
+        }
+
+        System::getContainer()->get( 'monolog.logger.contao.forms' )->info(
+            self::MARK_PREFIX . 'Form "' . $form->title . '" wurde als Spam erkannt (Modus: ' . $mode . ', Prüfung(en): ' . \implode( ', ', $checkParts ) . '). Felder: ' . \implode( ', ', $fieldParts )
+        );
     }
 }

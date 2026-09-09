@@ -21,16 +21,27 @@ namespace Softleister\ContaoMailcheckBundle\SpamCheck;
  * Eigene Regeln: diese Klasse erweitern und spamScore() überschreiben,
  * oder eine eigene Klasse gegen SpamCheckerInterface implementieren.
  */
-class DefaultSpamChecker implements SpamCheckerInterface
+class DefaultSpamChecker implements ScoredSpamCheckerInterface
 {
     protected const THRESHOLD = 4;
 
     /** Felder, deren Wert nicht geprüft wird (z.B. echte E-Mail-Adressen, technische Felder) */
     protected const IGNORE_FIELDS = ['email', 'e_mail', 'FORM_SUBMIT', 'REQUEST_TOKEN'];
 
+    /** Score der zuletzt geprüften Formulardaten (für getScore()) */
+    private int $lastScore = 0;
+
     public function isSpam( array $submittedData ): bool
     {
-        return $this->spamScore( $submittedData ) >= static::THRESHOLD;
+        $this->lastScore = $this->spamScore( $submittedData );
+
+        return $this->lastScore >= static::THRESHOLD;
+    }
+
+
+    public function getScore( ): int
+    {
+        return $this->lastScore;
     }
 
 
