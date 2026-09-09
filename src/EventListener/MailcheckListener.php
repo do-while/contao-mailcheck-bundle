@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Softleister\ContaoMailcheckBundle\EventListener;
 
 
+use Contao\CoreBundle\Monolog\ContaoContext;
 use Contao\Form;
 use Contao\StringUtil;
 use Contao\System;
@@ -138,7 +139,8 @@ class MailcheckListener
         }
 
         System::getContainer()->get( 'monolog.logger.contao.forms' )->info(
-            self::MARK_PREFIX . 'Form "' . $form->title . '" wurde als Spam erkannt (Modus: ' . $mode . ', Prüfung(en): ' . \implode( ', ', $checkParts ) . '). Felder: ' . \implode( ', ', $fieldParts )
+            self::MARK_PREFIX . 'Form "' . $form->title . '" wurde als Spam erkannt (Modus: ' . $mode . ', Prüfung(en): ' . \implode( ', ', $checkParts ) . '). Felder: ' . \implode( ', ', $fieldParts ),
+            ['contao' => new ContaoContext( __METHOD__, ContaoContext::FORMS )]
         );
     }
 }
