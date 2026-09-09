@@ -4,3 +4,6 @@
 .project
 .settings/
 .crypt/
+
+# interne Entwicklungs-Doku, nicht fuer GitHub bestimmt
+DOKUMENTATION.md

@@ -21,15 +21,22 @@ use Softleister\ContaoMailcheckBundle\SpamCheck\ScoredSpamCheckerInterface;
 use Softleister\ContaoMailcheckBundle\SpamCheck\SpamCheckerRegistry;
 
 /**
- * Hook-Listener für TL_HOOKS['prepareFormData'].
+ * Hook-Listener für TL_HOOKS['prepareFormData'] und TL_HOOKS['sendNotificationMessage'].
  *
- * Läuft VOR dem Mailversand (siehe Contao\Form::processFormData()) und
- * damit auch vor dem Hook 'processFormData', an den sich u.a. das
- * Notification Center hängt. Die Bundle-Ladereihenfolge spielt dabei
- * KEINE Rolle: prepareFormData und processFormData sind zwei
- * unterschiedliche, in Contao\Form::processFormData() fest verdrahtete
- * Zeitpunkte – prepareFormData läuft immer vor processFormData, egal in
- * welcher Reihenfolge die Bundles geladen werden.
+ * HINWEIS: Dies ist der Contao-4.13-Zweig (siehe composer.json:
+ * contao/core-bundle ^4.13, terminal42/notification_center ^1.7 als
+ * feste Abhängigkeit). Für Contao 5.x mit Notification Center 2.x
+ * (komplett andere, Symfony-basierte Architektur) gibt es einen
+ * separaten Branch mit eigener NC-Integration.
+ *
+ * prepareFormData läuft VOR dem Mailversand (siehe
+ * Contao\Form::processFormData()) und damit auch vor dem Hook
+ * 'processFormData', an den sich u.a. das Notification Center hängt.
+ * Die Bundle-Ladereihenfolge spielt dabei KEINE Rolle: prepareFormData
+ * und processFormData sind zwei unterschiedliche, in
+ * Contao\Form::processFormData() fest verdrahtete Zeitpunkte –
+ * prepareFormData läuft immer vor processFormData, egal in welcher
+ * Reihenfolge die Bundles geladen werden.
  *
  * Geprüft wird nur, wenn im Formular unter "Formulareigenschaften"
  * mindestens eine Prüfung ausgewählt wurde (Feld mailcheck_checks,
@@ -44,10 +51,27 @@ class MailcheckListener
 
     private const MARK_PREFIX = 'MAILSPAM! ';
 
-    /** Bundle-Klasse des Notification Center, falls installiert */
-    private const NOTIFICATION_CENTER_BUNDLE = 'Terminal42\\NotificationCenterBundle\\NotificationCenterBundle';
-
     private SpamCheckerRegistry $registry;
+
+    /**
+     * Wird in onPrepareFormData() gesetzt, wenn die aktuelle Anfrage als
+     * Spam erkannt wurde (MODE_DISCARD) - ausgewertet in
+     * onSendNotificationMessage(), um Notification-Center-1.x-Nachrichten
+     * für dieselbe Anfrage zu unterdrücken. Pro Request nur EIN
+     * Formular anzunehmen ist im normalen Contao-Ablauf (Seitenaufruf =
+     * ein Formular-POST) eine sichere Annahme.
+     */
+    private bool $suppressNcMessages = false;
+
+    /**
+     * Wird in onPrepareFormData() gesetzt, wenn die aktuelle Anfrage im
+     * Modus MODE_MARK als Spam erkannt wurde - ausgewertet in
+     * onSendNotificationMessage(), um in Notification-Center-1.x-Nachrichten
+     * per Token ##mailcheck_marker## eine Spam-Markierung einzufügen. Der
+     * Token muss von Hagen einmalig manuell in das jeweilige NC-Nachrichten-
+     * Template (z.B. im Betreff) eingetragen werden, siehe DOKUMENTATION.md.
+     */
+    private bool $markNcMessages = false;
 
 
     public function __construct( SpamCheckerRegistry $registry )
@@ -76,6 +100,12 @@ class MailcheckListener
             if( isset( $submittedData['subject'] ) ) {
                 $submittedData['subject'] = self::MARK_PREFIX . $submittedData['subject'];
             }
+
+            // Notification Center 1.x markieren: eigene Betreff-/Text-Templates
+            // liegen komplett in NC selbst (Tokens ##...##), $form->subject wirkt
+            // dort NICHT. Daher wird in onSendNotificationMessage() zusätzlich
+            // der Token ##mailcheck_marker## in $cpTokens eingefügt.
+            $this->markNcMessages = true;
             return;
         }
 
@@ -83,14 +113,39 @@ class MailcheckListener
         $form->sendViaEmail = false;
         $form->storeValues  = false;
 
-        // Notification Center (terminal42/notification_center) ebenfalls
-        // unterdrücken, sofern installiert. Setzt das von NC ausgewertete
-        // Feld nc_notification zurück (Achtung: nicht am NC-Quellcode
-        // verifiziert, siehe DOKUMENTATION.md – bitte mit einer echten
-        // NC-Konfiguration testen).
-        if( \class_exists( self::NOTIFICATION_CENTER_BUNDLE ) ) {
-            $form->nc_notification = 0;
-        }
+        // Notification Center 1.x unterdrücken: das Feld nc_notification
+        // wirkt bei NC 1.x NICHT (anders als bei NC 2.x) - stattdessen
+        // wird jede über NC versendete Nachricht in onSendNotificationMessage()
+        // abgefangen, solange dieses Flag für die aktuelle Anfrage gesetzt ist.
+        $this->suppressNcMessages = true;
+    }
+
+
+    /**
+     * Hook-Callback für TL_HOOKS['sendNotificationMessage'] (Notification
+     * Center 1.x, library/NotificationCenter/Model/Message.php). Wird pro
+     * versendeter Nachricht aufgerufen; return false storniert genau
+     * diese eine Nachricht. $objMessage/$objGatewayModel bewusst ohne
+     * Typehint, da NC 1.x eigene Modellklassen sind und wir sie hier
+     * inhaltlich nicht auswerten müssen.
+     *
+     * $cpTokens wird bewusst per Referenz angenommen (&$cpTokens): der
+     * Hook wird in Message::send() mit einer lokalen Kopie $cpTokens
+     * aufgerufen, die anschließend unverändert an $objGateway->send()
+     * weitergereicht wird - Änderungen wirken sich also nur auf die
+     * gerade zu versendende Nachricht aus. Der Token ##mailcheck_marker##
+     * wird hier IMMER gesetzt (MARK_PREFIX oder Leerstring) - NC ersetzt
+     * nur Tokens, die tatsächlich in $cpTokens vorhanden sind, ein nicht
+     * gesetzter Token bliebe im Betreff als Klartext ##mailcheck_marker##
+     * stehen (von Hagen live beobachtet). Er muss von Hagen manuell in
+     * das jeweilige NC-Nachrichten-Template eingetragen werden, damit die
+     * Markierung im NC-Versand sichtbar wird (siehe DOKUMENTATION.md).
+     */
+    public function onSendNotificationMessage( $objMessage, array &$cpTokens, string $cpLanguage, $objGatewayModel ): bool
+    {
+        $cpTokens['mailcheck_marker'] = $this->markNcMessages ? self::MARK_PREFIX : '';
+
+        return !$this->suppressNcMessages;
     }
 
 
