@@ -75,4 +75,4 @@ Genaue Beispiele dazu in DOKUMENTATION.md.
 
 ## Lizenz
 
-Proprietär, Softleister – Hagen Klemp.
+LGPL-3.0+, Softleister – Hagen Klemp.
