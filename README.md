@@ -59,10 +59,31 @@ Jedes Formular hat unter **Formulareigenschaften** eine neue Legende
   - **Mail trotzdem senden, Betreff markieren** – die Mail wird ganz
     normal verschickt, aber der Betreff bekommt das Präfix `MAILSPAM! `
     vorangestellt, sodass du sie z. B. per Mail-Filter aussortieren oder
-    einfach optisch erkennen kannst.
+    einfach optisch erkennen kannst. Bei der normalen Contao-Mail
+    passiert das automatisch, ohne dass du etwas einstellen musst.
 
 Beide Einstellungen sind reine Backend-Sache – für den normalen Einsatz
 ist kein Eingriff in den Quellcode nötig.
+
+### Markierung bei Notification Center
+
+Läuft der Formularversand (auch) über Notification Center, wirkt sich
+die Betreff-Markierung dort **nicht automatisch** aus – NCs eigene
+Nachrichten-Vorlagen (Betreff, Text) liegen komplett in NC selbst und
+kennen den Contao-Formular-Betreff nicht. Damit die Markierung auch dort
+erscheint, musst du in der jeweiligen NC-Nachricht (im NC-Backend, z. B.
+im Betreff-Feld) einmalig den Platzhalter
+
+```
+##mailcheck_marker##
+```
+
+eintragen. Er wird beim Versand automatisch entweder durch `MAILSPAM! `
+(wenn die Eingabe als Spam erkannt und "Betreff markieren" aktiv ist)
+oder durch einen Leerstring ersetzt – bei sauberen Eingaben verschwindet
+der Platzhalter also einfach, ohne dass er irgendwo im Betreff sichtbar
+bleibt. Ohne diesen Eintrag bleibt die NC-Nachricht komplett unmarkiert,
+auch wenn im Backend "Betreff markieren" eingestellt ist.
 
 ## Eigene Prüfregeln ergänzen
 
